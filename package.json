@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "check": "npm run lint && npm run typecheck && npm run build && npm audit --audit-level=moderate",
     "lint": "eslint app next.config.ts tailwind.config.ts eslint.config.mjs postcss.config.mjs",
     "typecheck": "tsc --noEmit"
   },

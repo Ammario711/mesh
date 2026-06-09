@@ -21,6 +21,12 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Production Checks
 
 ```bash
+npm run check
+```
+
+Or run the checks individually:
+
+```bash
 npm run lint
 npm run typecheck
 npm run build
