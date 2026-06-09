@@ -26,6 +26,9 @@ import {
 
 type MaterialKey = "PLA" | "ABS" | "PETG";
 type InfillKey = "20%" | "50%" | "100%";
+type FinishKey = "Draft" | "Standard" | "Vapor Smooth";
+type ToleranceKey = "Standard" | "Tight";
+type UrgencyKey = "Standard" | "Rush";
 type ViewKey = "new-job" | "my-files" | "local-makers";
 type CadFileType = "STL" | "STEP";
 type ParseSource = "Exact STL mesh" | "STEP estimate";
@@ -42,13 +45,37 @@ type InfillOption = {
   description: string;
 };
 
+type FinishOption = {
+  label: FinishKey;
+  multiplier: number;
+  description: string;
+};
+
+type ToleranceOption = {
+  label: ToleranceKey;
+  multiplier: number;
+  description: string;
+};
+
+type UrgencyOption = {
+  label: UrgencyKey;
+  multiplier: number;
+  leadTime: string;
+  description: string;
+};
+
 type Maker = {
   id: number;
   name: string;
   machine: string;
   distance: string;
+  distanceMiles: number;
   rating: string;
   eta: string;
+  leadDays: number;
+  capacity: string;
+  materials: MaterialKey[];
+  processes: string[];
   tags: string[];
 };
 
@@ -69,14 +96,48 @@ type ParsedCadFile = {
 
 type JobSubmission = {
   id: string;
+  projectName: string;
   fileName: string;
   makerName: string;
   machine: string;
   material: MaterialKey;
   infill: InfillKey;
+  finish: FinishKey;
+  tolerance: ToleranceKey;
+  urgency: UrgencyKey;
+  quantity: number;
+  unitPrice: number;
   price: number;
-  status: "Sent";
+  platformFee: number;
+  turnaround: string;
+  matchScore: number;
+  notes: string;
+  status: "Sent" | "Quote Sent" | "Accepted" | "In Production" | "Ready";
   sentAt: string;
+};
+
+type QuoteResult = {
+  price: number;
+  unitPrice: number;
+  materialCost: number;
+  setupFee: number;
+  finishFee: number;
+  urgencyFee: number;
+  platformFee: number;
+  quantityDiscount: number;
+  selectedMaterial: MaterialOption;
+  selectedInfill: InfillOption;
+  selectedFinish: FinishOption;
+  selectedTolerance: ToleranceOption;
+  selectedUrgency: UrgencyOption;
+  turnaround: string;
+};
+
+type MakerMatch = {
+  maker: Maker;
+  score: number;
+  compatible: boolean;
+  reasons: string[];
 };
 
 type GeometryResult = {
@@ -104,14 +165,61 @@ const infillOptions: InfillOption[] = [
   { label: "100%", multiplier: 2.15, description: "Maximum density output" },
 ];
 
+const finishOptions: FinishOption[] = [
+  { label: "Draft", multiplier: 1, description: "Fastest print settings" },
+  {
+    label: "Standard",
+    multiplier: 1.12,
+    description: "Clean layers, inspected finish",
+  },
+  {
+    label: "Vapor Smooth",
+    multiplier: 1.32,
+    description: "Post-processed surface finish",
+  },
+];
+
+const toleranceOptions: ToleranceOption[] = [
+  {
+    label: "Standard",
+    multiplier: 1,
+    description: "+/- 0.30 mm production target",
+  },
+  {
+    label: "Tight",
+    multiplier: 1.18,
+    description: "+/- 0.15 mm inspection target",
+  },
+];
+
+const urgencyOptions: UrgencyOption[] = [
+  {
+    label: "Standard",
+    multiplier: 1,
+    leadTime: "2-3 days",
+    description: "Best price across nearby makers",
+  },
+  {
+    label: "Rush",
+    multiplier: 1.22,
+    leadTime: "24 hours",
+    description: "Prioritized queue and same-day review",
+  },
+];
+
 const makers: Maker[] = [
   {
     id: 1,
     name: "MakerSpace Mississauga",
     machine: "Prusa MK4",
     distance: "2.4 miles away",
+    distanceMiles: 2.4,
     rating: "4.9",
     eta: "Ready today",
+    leadDays: 1,
+    capacity: "6 parts/day",
+    materials: ["PLA", "PETG"],
+    processes: ["FDM"],
     tags: ["FDM", "PLA/PETG", "Student friendly"],
   },
   {
@@ -119,8 +227,13 @@ const makers: Maker[] = [
     name: "ForgeLab Etobicoke",
     machine: "Bambu X1 Carbon",
     distance: "5.8 miles away",
+    distanceMiles: 5.8,
     rating: "4.8",
     eta: "Ships tomorrow",
+    leadDays: 2,
+    capacity: "12 parts/day",
+    materials: ["PLA", "ABS", "PETG"],
+    processes: ["FDM"],
     tags: ["FDM", "ABS", "Tight tolerance"],
   },
   {
@@ -128,8 +241,13 @@ const makers: Maker[] = [
     name: "Northline CNC & Print",
     machine: "Shapeoko Pro CNC",
     distance: "8.1 miles away",
+    distanceMiles: 8.1,
     rating: "4.7",
     eta: "2 day queue",
+    leadDays: 3,
+    capacity: "Batch runs",
+    materials: ["ABS", "PETG"],
+    processes: ["CNC", "FDM"],
     tags: ["CNC", "Nylon", "Batch runs"],
   },
 ];
@@ -157,6 +275,13 @@ export default function Home() {
   const [parseError, setParseError] = useState<string | null>(null);
   const [material, setMaterial] = useState<MaterialKey>("PLA");
   const [infill, setInfill] = useState<InfillKey>("20%");
+  const [finish, setFinish] = useState<FinishKey>("Standard");
+  const [toleranceTarget, setToleranceTarget] =
+    useState<ToleranceKey>("Standard");
+  const [urgency, setUrgency] = useState<UrgencyKey>("Standard");
+  const [quantity, setQuantity] = useState(1);
+  const [projectName, setProjectName] = useState("Bracket prototype");
+  const [notes, setNotes] = useState("");
   const [sentMakerId, setSentMakerId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -177,7 +302,7 @@ export default function Home() {
     }
   }, [jobs, storageReady]);
 
-  const quote = useMemo(() => {
+  const quote = useMemo<QuoteResult | null>(() => {
     if (!activeFile) {
       return null;
     }
@@ -188,18 +313,65 @@ export default function Home() {
     const selectedInfill =
       infillOptions.find((option) => option.label === infill) ??
       infillOptions[0];
+    const selectedFinish =
+      finishOptions.find((option) => option.label === finish) ??
+      finishOptions[1];
+    const selectedTolerance =
+      toleranceOptions.find((option) => option.label === toleranceTarget) ??
+      toleranceOptions[0];
+    const selectedUrgency =
+      urgencyOptions.find((option) => option.label === urgency) ??
+      urgencyOptions[0];
+    const safeQuantity = clamp(Math.round(quantity), 1, 250);
     const setupFee = activeFile.source === "Exact STL mesh" ? 4.99 : 9.5;
     const materialCost = activeFile.volume * selectedMaterial.rate;
-    const price = materialCost * selectedInfill.multiplier + setupFee;
+    const perPartBase =
+      materialCost *
+      selectedInfill.multiplier *
+      selectedFinish.multiplier *
+      selectedTolerance.multiplier;
+    const quantityDiscount =
+      safeQuantity >= 25 ? 0.18 : safeQuantity >= 10 ? 0.12 : safeQuantity >= 4 ? 0.06 : 0;
+    const discountedParts = perPartBase * safeQuantity * (1 - quantityDiscount);
+    const urgencyFee =
+      selectedUrgency.label === "Rush"
+        ? Math.max(8, discountedParts * (selectedUrgency.multiplier - 1))
+        : 0;
+    const platformFee = Math.max(1.5, (discountedParts + setupFee + urgencyFee) * 0.035);
+    const price = discountedParts + setupFee + urgencyFee + platformFee;
 
     return {
       price,
+      unitPrice: price / safeQuantity,
       materialCost,
       setupFee,
+      finishFee: perPartBase * safeQuantity - materialCost * selectedInfill.multiplier * safeQuantity,
+      urgencyFee,
+      platformFee,
+      quantityDiscount,
       selectedMaterial,
       selectedInfill,
+      selectedFinish,
+      selectedTolerance,
+      selectedUrgency,
+      turnaround: selectedUrgency.leadTime,
     };
-  }, [activeFile, material, infill]);
+  }, [activeFile, finish, infill, material, quantity, toleranceTarget, urgency]);
+
+  const matchedMakers = useMemo(
+    () =>
+      makers
+        .map((maker) =>
+          scoreMaker(maker, {
+            material,
+            quantity,
+            toleranceTarget,
+            urgency,
+          }),
+        )
+        .sort((a, b) => b.score - a.score),
+    [material, quantity, toleranceTarget, urgency],
+  );
 
   const headerContent = {
     "new-job": {
@@ -266,15 +438,28 @@ export default function Home() {
       return;
     }
 
+    const match =
+      matchedMakers.find((item) => item.maker.id === maker.id)?.score ?? 70;
+
     const job: JobSubmission = {
       id: `${activeFile.id}-${maker.id}-${Date.now()}`,
+      projectName: projectName.trim() || activeFile.name,
       fileName: activeFile.name,
       makerName: maker.name,
       machine: maker.machine,
       material,
       infill,
+      finish,
+      tolerance: toleranceTarget,
+      urgency,
+      quantity,
+      unitPrice: quote.unitPrice,
       price: quote.price,
-      status: "Sent",
+      platformFee: quote.platformFee,
+      turnaround: quote.turnaround,
+      matchScore: match,
+      notes,
+      status: "Quote Sent",
       sentAt: new Date().toISOString(),
     };
 
@@ -291,6 +476,13 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#eef1f4] text-graphite">
+      <input
+        accept=".stl,.step,.stp"
+        className="hidden"
+        onChange={handleInputChange}
+        ref={fileInputRef}
+        type="file"
+      />
       <div className="flex min-h-screen">
         <aside className="hidden w-64 shrink-0 border-r border-zinc-300/70 bg-[#151719] px-5 py-6 text-zinc-100 lg:flex lg:flex-col">
           <div className="flex items-center gap-3">
@@ -383,14 +575,6 @@ export default function Home() {
                     }
                   }}
                 >
-                  <input
-                    accept=".stl,.step,.stp"
-                    className="hidden"
-                    onChange={handleInputChange}
-                    ref={fileInputRef}
-                    type="file"
-                  />
-
                   <div className="flex min-h-[360px] flex-col items-center justify-center text-center">
                     <div className="grid h-20 w-20 place-items-center rounded-md bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200">
                       {isParsing ? (
@@ -427,6 +611,7 @@ export default function Home() {
                       </button>
                       <button
                         className="inline-flex h-11 items-center gap-2 rounded-md border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:border-zinc-400 disabled:cursor-not-allowed disabled:text-zinc-400"
+                        data-testid="sample-stl-button"
                         disabled={isParsing}
                         onClick={() => void handleFileUpload(createSampleStl())}
                         type="button"
@@ -508,19 +693,38 @@ export default function Home() {
                     value={activeFile ? activeFile.tolerance : "--"}
                   />
                 </section>
+
+                <JobSpecPanel
+                  finish={finish}
+                  notes={notes}
+                  projectName={projectName}
+                  quantity={quantity}
+                  setFinish={setFinish}
+                  setNotes={setNotes}
+                  setProjectName={setProjectName}
+                  setQuantity={setQuantity}
+                  setToleranceTarget={setToleranceTarget}
+                  setUrgency={setUrgency}
+                  toleranceTarget={toleranceTarget}
+                  urgency={urgency}
+                />
               </div>
 
               <aside className="space-y-6">
                 <QuotePanel
                   activeFile={activeFile}
+                  finish={finish}
                   infill={infill}
                   material={material}
+                  quantity={quantity}
                   quote={quote}
                   setInfill={setInfill}
                   setMaterial={setMaterial}
+                  toleranceTarget={toleranceTarget}
                 />
                 <MakerMatchPanel
                   activeFile={activeFile}
+                  matches={matchedMakers}
                   quoteReady={Boolean(quote)}
                   sentMakerId={sentMakerId}
                   onSend={sendJob}
@@ -613,11 +817,11 @@ export default function Home() {
                 </div>
 
                 <div className="mt-5 grid gap-3 xl:grid-cols-2">
-                  {makers.map((maker) => (
+                  {matchedMakers.map((match) => (
                     <MakerCard
                       activeFile={activeFile}
-                      key={maker.id}
-                      maker={maker}
+                      key={match.maker.id}
+                      match={match}
                       quoteReady={Boolean(quote)}
                       sentMakerId={sentMakerId}
                       onSend={sendJob}
@@ -628,11 +832,14 @@ export default function Home() {
 
               <QuotePanel
                 activeFile={activeFile}
+                finish={finish}
                 infill={infill}
                 material={material}
+                quantity={quantity}
                 quote={quote}
                 setInfill={setInfill}
                 setMaterial={setMaterial}
+                toleranceTarget={toleranceTarget}
               />
             </div>
           )}
@@ -642,24 +849,152 @@ export default function Home() {
   );
 }
 
+function JobSpecPanel({
+  projectName,
+  quantity,
+  finish,
+  toleranceTarget,
+  urgency,
+  notes,
+  setProjectName,
+  setQuantity,
+  setFinish,
+  setToleranceTarget,
+  setUrgency,
+  setNotes,
+}: {
+  projectName: string;
+  quantity: number;
+  finish: FinishKey;
+  toleranceTarget: ToleranceKey;
+  urgency: UrgencyKey;
+  notes: string;
+  setProjectName: (value: string) => void;
+  setQuantity: (value: number) => void;
+  setFinish: (value: FinishKey) => void;
+  setToleranceTarget: (value: ToleranceKey) => void;
+  setUrgency: (value: UrgencyKey) => void;
+  setNotes: (value: string) => void;
+}) {
+  return (
+    <section className="rounded-md border border-zinc-200 bg-white p-5 shadow-panel">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-zinc-500">RFQ Details</p>
+          <h2 className="mt-1 text-xl font-semibold tracking-normal">
+            Manufacturing requirements
+          </h2>
+        </div>
+        <SlidersHorizontal className="h-5 w-5 text-zinc-500" />
+      </div>
+
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <label className="block">
+          <span className="mb-2 block text-sm font-semibold text-graphite">
+            Project name
+          </span>
+          <input
+            className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm font-semibold text-graphite outline-none transition focus:border-weld focus:ring-4 focus:ring-orange-100"
+            data-testid="project-name-input"
+            onChange={(event) => setProjectName(event.target.value)}
+            value={projectName}
+          />
+        </label>
+
+        <label className="block">
+          <span className="mb-2 block text-sm font-semibold text-graphite">
+            Quantity
+          </span>
+          <input
+            className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm font-semibold text-graphite outline-none transition focus:border-weld focus:ring-4 focus:ring-orange-100"
+            data-testid="quantity-input"
+            min={1}
+            max={250}
+            onChange={(event) =>
+              setQuantity(clamp(Number(event.target.value) || 1, 1, 250))
+            }
+            type="number"
+            value={quantity}
+          />
+        </label>
+
+        <SelectField
+          icon={Layers}
+          label="Finish"
+          value={finish}
+          onChange={(value) => setFinish(value as FinishKey)}
+          options={finishOptions.map((option) => ({
+            label: option.label,
+            value: option.label,
+          }))}
+          testId="finish-select"
+          helper={finishOptions.find((option) => option.label === finish)?.description ?? ""}
+        />
+
+        <SelectField
+          icon={Gauge}
+          label="Tolerance Target"
+          value={toleranceTarget}
+          onChange={(value) => setToleranceTarget(value as ToleranceKey)}
+          options={toleranceOptions.map((option) => ({
+            label: option.label,
+            value: option.label,
+          }))}
+          testId="tolerance-select"
+          helper={
+            toleranceOptions.find((option) => option.label === toleranceTarget)
+              ?.description ?? ""
+          }
+        />
+
+        <SelectField
+          icon={Clock3}
+          label="Timeline"
+          value={urgency}
+          onChange={(value) => setUrgency(value as UrgencyKey)}
+          options={urgencyOptions.map((option) => ({
+            label: option.label,
+            value: option.label,
+          }))}
+          testId="urgency-select"
+          helper={urgencyOptions.find((option) => option.label === urgency)?.description ?? ""}
+        />
+
+        <label className="block">
+          <span className="mb-2 block text-sm font-semibold text-graphite">
+            Notes
+          </span>
+          <textarea
+            className="min-h-24 w-full resize-none rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-graphite outline-none transition focus:border-weld focus:ring-4 focus:ring-orange-100"
+            data-testid="notes-input"
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="Thread inserts, cosmetic surfaces, pickup constraints..."
+            value={notes}
+          />
+        </label>
+      </div>
+    </section>
+  );
+}
+
 function QuotePanel({
   activeFile,
   quote,
   material,
   infill,
+  finish,
+  toleranceTarget,
+  quantity,
   setMaterial,
   setInfill,
 }: {
   activeFile: ParsedCadFile | null;
-  quote: {
-    price: number;
-    materialCost: number;
-    setupFee: number;
-    selectedMaterial: MaterialOption;
-    selectedInfill: InfillOption;
-  } | null;
+  quote: QuoteResult | null;
   material: MaterialKey;
   infill: InfillKey;
+  finish: FinishKey;
+  toleranceTarget: ToleranceKey;
+  quantity: number;
   setMaterial: (value: MaterialKey) => void;
   setInfill: (value: InfillKey) => void;
 }) {
@@ -694,6 +1029,7 @@ function QuotePanel({
               label: option.name,
               value: option.name,
             }))}
+            testId="material-select"
             helper={quote.selectedMaterial.description}
           />
 
@@ -706,8 +1042,31 @@ function QuotePanel({
               label: option.label,
               value: option.label,
             }))}
+            testId="infill-select"
             helper={quote.selectedInfill.description}
           />
+
+          <div className="rounded-md border border-zinc-200 bg-zinc-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-graphite">
+                RFQ snapshot
+              </p>
+              <Clock3 className="h-4 w-4 text-zinc-500" />
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+              <QuoteLine
+                label="Quantity"
+                value={`${quantity} part${quantity === 1 ? "" : "s"}`}
+              />
+              <QuoteLine label="Finish" value={finish} />
+              <QuoteLine label="Tolerance" value={toleranceTarget} />
+              <QuoteLine label="Timeline" value={quote.selectedUrgency.leadTime} />
+            </div>
+            <p className="mt-3 text-xs font-medium leading-5 text-zinc-500">
+              Edit project specs in RFQ Details; material and infill update this
+              estimate instantly.
+            </p>
+          </div>
 
           <div className="rounded-md border border-zinc-200 bg-[#f8fafc] p-4">
             <div className="flex items-end justify-between gap-4">
@@ -731,6 +1090,10 @@ function QuotePanel({
 
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
               <QuoteLine
+                label="Unit price"
+                value={`$${quote.unitPrice.toFixed(2)}`}
+              />
+              <QuoteLine
                 label="Material use"
                 value={`$${quote.materialCost.toFixed(2)}`}
               />
@@ -738,7 +1101,25 @@ function QuotePanel({
                 label="Setup"
                 value={`$${quote.setupFee.toFixed(2)}`}
               />
+              <QuoteLine
+                label="Finish/tolerance"
+                value={`$${quote.finishFee.toFixed(2)}`}
+              />
+              <QuoteLine
+                label="Rush"
+                value={`$${quote.urgencyFee.toFixed(2)}`}
+              />
+              <QuoteLine
+                label="Platform"
+                value={`$${quote.platformFee.toFixed(2)}`}
+              />
             </div>
+
+            {quote.quantityDiscount > 0 && (
+              <p className="mt-3 text-xs font-semibold text-emerald-700">
+                Batch discount applied: {Math.round(quote.quantityDiscount * 100)}%
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -748,11 +1129,13 @@ function QuotePanel({
 
 function MakerMatchPanel({
   activeFile,
+  matches,
   quoteReady,
   sentMakerId,
   onSend,
 }: {
   activeFile: ParsedCadFile | null;
+  matches: MakerMatch[];
   quoteReady: boolean;
   sentMakerId: number | null;
   onSend: (maker: Maker) => void;
@@ -772,11 +1155,11 @@ function MakerMatchPanel({
       </div>
 
       <div className="mt-5 space-y-3">
-        {makers.map((maker) => (
+        {matches.map((match) => (
           <MakerCard
             activeFile={activeFile}
-            key={maker.id}
-            maker={maker}
+            key={match.maker.id}
+            match={match}
             quoteReady={quoteReady}
             sentMakerId={sentMakerId}
             onSend={onSend}
@@ -789,17 +1172,18 @@ function MakerMatchPanel({
 
 function MakerCard({
   activeFile,
-  maker,
+  match,
   quoteReady,
   sentMakerId,
   onSend,
 }: {
   activeFile: ParsedCadFile | null;
-  maker: Maker;
+  match: MakerMatch;
   quoteReady: boolean;
   sentMakerId: number | null;
   onSend: (maker: Maker) => void;
 }) {
+  const { maker } = match;
   const isSent = sentMakerId === maker.id;
 
   return (
@@ -819,30 +1203,44 @@ function MakerCard({
             {maker.machine} - {maker.distance}
           </p>
         </div>
-        <div className="rounded-md bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-700">
-          {maker.rating}
+        <div className="shrink-0 rounded-md bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-700">
+          {match.score}% match
         </div>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
+        <span
+          className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
+            match.compatible
+              ? "bg-emerald-100 text-emerald-800"
+              : "bg-amber-100 text-amber-800"
+          }`}
+        >
+          {match.compatible ? "Compatible" : "Manual review"}
+        </span>
         {maker.tags.map((tag) => (
           <span
             className="rounded-md bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-600"
             key={tag}
           >
-            {tag}
+          {tag}
           </span>
         ))}
       </div>
 
+      <p className="mt-3 text-xs font-medium leading-5 text-zinc-500">
+        {match.reasons.join(" / ")}
+      </p>
+
       <div className="mt-4 flex items-center justify-between gap-3">
         <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
           <Navigation className="h-3.5 w-3.5" />
-          {maker.eta}
+          {maker.eta} / {maker.capacity} / {maker.rating} rating
         </span>
         <button
           className="inline-flex h-9 items-center gap-2 rounded-md bg-graphite px-3 text-xs font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
-          disabled={!activeFile || !quoteReady}
+          data-testid={`send-job-${maker.id}`}
+          disabled={!activeFile || !quoteReady || !match.compatible}
           onClick={() => onSend(maker)}
           type="button"
         >
@@ -886,19 +1284,42 @@ function RecentJobsPanel({ jobs }: { jobs: JobSubmission[] }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="truncate text-sm font-semibold text-graphite">
-                    {job.fileName}
+                    {job.projectName ?? job.fileName}
                   </h3>
                   <p className="mt-1 text-sm text-zinc-600">
                     {job.makerName} - {job.machine}
                   </p>
                 </div>
-                <p className="shrink-0 text-sm font-semibold text-graphite">
-                  ${job.price.toFixed(2)}
-                </p>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-semibold text-graphite">
+                    ${job.price.toFixed(2)}
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-emerald-700">
+                    {job.status}
+                  </p>
+                </div>
               </div>
-              <p className="mt-3 text-xs font-medium text-zinc-500">
-                {job.material} / {job.infill} / {formatDate(job.sentAt)}
+              <p className="mt-3 text-xs font-medium leading-5 text-zinc-500">
+                {job.fileName} / Qty {job.quantity ?? 1} / {job.material} /{" "}
+                {job.infill} / {job.finish ?? "Standard"} /{" "}
+                {job.turnaround ?? "2-3 days"}
               </p>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                <QuoteLine
+                  label="Unit"
+                  value={`$${(job.unitPrice ?? job.price).toFixed(2)}`}
+                />
+                <QuoteLine
+                  label="Match"
+                  value={`${job.matchScore ?? 70}%`}
+                />
+                <QuoteLine label="Sent" value={formatDate(job.sentAt)} />
+              </div>
+              {job.notes && (
+                <p className="mt-3 rounded-md bg-zinc-50 p-3 text-xs font-medium leading-5 text-zinc-600">
+                  {job.notes}
+                </p>
+              )}
             </article>
           ))
         )}
@@ -963,6 +1384,7 @@ function SelectField({
   value,
   options,
   helper,
+  testId,
   onChange,
 }: {
   icon: LucideIcon;
@@ -970,6 +1392,7 @@ function SelectField({
   value: string;
   options: { label: string; value: string }[];
   helper: string;
+  testId?: string;
   onChange: (value: string) => void;
 }) {
   return (
@@ -981,6 +1404,7 @@ function SelectField({
       <span className="relative block">
         <select
           className="h-12 w-full appearance-none rounded-md border border-zinc-300 bg-white px-3 pr-10 text-sm font-semibold text-graphite outline-none transition focus:border-weld focus:ring-4 focus:ring-orange-100"
+          data-testid={testId}
           onChange={(event) => onChange(event.target.value)}
           value={value}
         >
@@ -1006,6 +1430,78 @@ function QuoteLine({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-sm font-semibold text-graphite">{value}</p>
     </div>
   );
+}
+
+function scoreMaker(
+  maker: Maker,
+  spec: {
+    material: MaterialKey;
+    quantity: number;
+    toleranceTarget: ToleranceKey;
+    urgency: UrgencyKey;
+  },
+): MakerMatch {
+  const reasons: string[] = [];
+  let score = 55;
+  const compatibleMaterial = maker.materials.includes(spec.material);
+  const supportsRush = maker.leadDays <= 2;
+  const supportsTightTolerance =
+    spec.toleranceTarget === "Standard" || maker.tags.includes("Tight tolerance");
+  const capacityNumber = Number.parseInt(maker.capacity, 10);
+  const capacityFits =
+    Number.isNaN(capacityNumber) || spec.quantity <= capacityNumber * 3;
+
+  if (compatibleMaterial) {
+    score += 18;
+    reasons.push(`${spec.material} available`);
+  } else {
+    score -= 22;
+    reasons.push(`${spec.material} requires review`);
+  }
+
+  if (maker.distanceMiles <= 3) {
+    score += 10;
+    reasons.push("closest pickup");
+  } else if (maker.distanceMiles <= 6) {
+    score += 6;
+    reasons.push("nearby");
+  }
+
+  if (spec.urgency === "Rush") {
+    if (supportsRush) {
+      score += 12;
+      reasons.push("rush capable");
+    } else {
+      score -= 12;
+      reasons.push("rush queue risk");
+    }
+  } else {
+    score += Math.max(0, 8 - maker.leadDays * 2);
+    reasons.push(maker.eta.toLowerCase());
+  }
+
+  if (supportsTightTolerance) {
+    score += 8;
+    reasons.push("tolerance fit");
+  } else {
+    score -= 10;
+    reasons.push("tolerance review");
+  }
+
+  if (capacityFits) {
+    score += 7;
+    reasons.push("capacity fit");
+  } else {
+    score -= 8;
+    reasons.push("batch capacity review");
+  }
+
+  return {
+    maker,
+    score: Math.round(clamp(score, 10, 99)),
+    compatible: compatibleMaterial && supportsTightTolerance && capacityFits,
+    reasons,
+  };
 }
 
 async function parseCadFile(file: File): Promise<ParsedCadFile> {

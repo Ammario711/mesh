@@ -41,8 +41,11 @@ The app is fully frontend-only. Mock CAD parsing, quote calculation, and local m
 - Compute STL mesh volume, dimensions, and triangle count in the browser.
 - Generate STEP quote estimates from file size and topology hints.
 - Recalculate quotes by material and infill density.
+- Configure RFQ details including quantity, finish, tolerance, timeline, and notes.
+- See line-item pricing with setup, rush, platform fee, unit price, and batch discounts.
+- Score local makers by material support, distance, tolerance capability, timeline, and capacity.
 - Persist parsed files and sent job records in local browser storage.
-- Send a quote to a mocked local maker and review recent job activity.
+- Send a quote to a compatible local maker and review richer job activity.
 
 ## Deploy
 
