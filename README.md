@@ -35,6 +35,15 @@ npm audit --audit-level=moderate
 
 The app is fully frontend-only. Mock CAD parsing, quote calculation, and local maker matching are handled with hardcoded data and React state in `app/page.tsx`.
 
+## Functional MVP Scope
+
+- Upload or drag `.stl`, `.step`, and `.stp` files.
+- Compute STL mesh volume, dimensions, and triangle count in the browser.
+- Generate STEP quote estimates from file size and topology hints.
+- Recalculate quotes by material and infill density.
+- Persist parsed files and sent job records in local browser storage.
+- Send a quote to a mocked local maker and review recent job activity.
+
 ## Deploy
 
 Production is currently deployed at:
