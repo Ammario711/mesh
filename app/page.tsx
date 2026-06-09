@@ -23,122 +23,32 @@ import {
   UploadCloud,
   Users,
 } from "lucide-react";
+import {
+  calculateQuote,
+  clamp,
+  countMatches,
+  finishOptions,
+  formatBytes,
+  getCadFileType,
+  infillOptions,
+  makers,
+  materialOptions,
+  scoreMaker,
+  toleranceOptions,
+  urgencyOptions,
+  type FinishKey,
+  type InfillKey,
+  type JobSubmission,
+  type Maker,
+  type MakerMatch,
+  type MaterialKey,
+  type ParsedCadFile,
+  type QuoteResult,
+  type ToleranceKey,
+  type UrgencyKey,
+} from "../lib/mesh/domain";
 
-type MaterialKey = "PLA" | "ABS" | "PETG";
-type InfillKey = "20%" | "50%" | "100%";
-type FinishKey = "Draft" | "Standard" | "Vapor Smooth";
-type ToleranceKey = "Standard" | "Tight";
-type UrgencyKey = "Standard" | "Rush";
 type ViewKey = "new-job" | "my-files" | "local-makers";
-type CadFileType = "STL" | "STEP";
-type ParseSource = "Exact STL mesh" | "STEP estimate";
-
-type MaterialOption = {
-  name: MaterialKey;
-  rate: number;
-  description: string;
-};
-
-type InfillOption = {
-  label: InfillKey;
-  multiplier: number;
-  description: string;
-};
-
-type FinishOption = {
-  label: FinishKey;
-  multiplier: number;
-  description: string;
-};
-
-type ToleranceOption = {
-  label: ToleranceKey;
-  multiplier: number;
-  description: string;
-};
-
-type UrgencyOption = {
-  label: UrgencyKey;
-  multiplier: number;
-  leadTime: string;
-  description: string;
-};
-
-type Maker = {
-  id: number;
-  name: string;
-  machine: string;
-  distance: string;
-  distanceMiles: number;
-  rating: string;
-  eta: string;
-  leadDays: number;
-  capacity: string;
-  materials: MaterialKey[];
-  processes: string[];
-  tags: string[];
-};
-
-type ParsedCadFile = {
-  id: string;
-  name: string;
-  type: CadFileType;
-  size: string;
-  sizeBytes: number;
-  volume: number;
-  dimensions: string;
-  tolerance: string;
-  triangleCount: number | null;
-  source: ParseSource;
-  note: string;
-  uploadedAt: string;
-};
-
-type JobSubmission = {
-  id: string;
-  projectName: string;
-  fileName: string;
-  makerName: string;
-  machine: string;
-  material: MaterialKey;
-  infill: InfillKey;
-  finish: FinishKey;
-  tolerance: ToleranceKey;
-  urgency: UrgencyKey;
-  quantity: number;
-  unitPrice: number;
-  price: number;
-  platformFee: number;
-  turnaround: string;
-  matchScore: number;
-  notes: string;
-  status: "Sent" | "Quote Sent" | "Accepted" | "In Production" | "Ready";
-  sentAt: string;
-};
-
-type QuoteResult = {
-  price: number;
-  unitPrice: number;
-  materialCost: number;
-  setupFee: number;
-  finishFee: number;
-  urgencyFee: number;
-  platformFee: number;
-  quantityDiscount: number;
-  selectedMaterial: MaterialOption;
-  selectedInfill: InfillOption;
-  selectedFinish: FinishOption;
-  selectedTolerance: ToleranceOption;
-  selectedUrgency: UrgencyOption;
-  turnaround: string;
-};
-
-type MakerMatch = {
-  maker: Maker;
-  score: number;
-  compatible: boolean;
-  reasons: string[];
-};
 
 type GeometryResult = {
   volume: number;
@@ -152,105 +62,6 @@ type Vector3 = {
   y: number;
   z: number;
 };
-
-const materialOptions: MaterialOption[] = [
-  { name: "PLA", rate: 0.35, description: "Fast prototype finish" },
-  { name: "ABS", rate: 0.42, description: "Heat-tolerant functional parts" },
-  { name: "PETG", rate: 0.48, description: "Durable, clean layer bonding" },
-];
-
-const infillOptions: InfillOption[] = [
-  { label: "20%", multiplier: 1, description: "Light validation model" },
-  { label: "50%", multiplier: 1.35, description: "Balanced functional part" },
-  { label: "100%", multiplier: 2.15, description: "Maximum density output" },
-];
-
-const finishOptions: FinishOption[] = [
-  { label: "Draft", multiplier: 1, description: "Fastest print settings" },
-  {
-    label: "Standard",
-    multiplier: 1.12,
-    description: "Clean layers, inspected finish",
-  },
-  {
-    label: "Vapor Smooth",
-    multiplier: 1.32,
-    description: "Post-processed surface finish",
-  },
-];
-
-const toleranceOptions: ToleranceOption[] = [
-  {
-    label: "Standard",
-    multiplier: 1,
-    description: "+/- 0.30 mm production target",
-  },
-  {
-    label: "Tight",
-    multiplier: 1.18,
-    description: "+/- 0.15 mm inspection target",
-  },
-];
-
-const urgencyOptions: UrgencyOption[] = [
-  {
-    label: "Standard",
-    multiplier: 1,
-    leadTime: "2-3 days",
-    description: "Best price across nearby makers",
-  },
-  {
-    label: "Rush",
-    multiplier: 1.22,
-    leadTime: "24 hours",
-    description: "Prioritized queue and same-day review",
-  },
-];
-
-const makers: Maker[] = [
-  {
-    id: 1,
-    name: "MakerSpace Mississauga",
-    machine: "Prusa MK4",
-    distance: "2.4 miles away",
-    distanceMiles: 2.4,
-    rating: "4.9",
-    eta: "Ready today",
-    leadDays: 1,
-    capacity: "6 parts/day",
-    materials: ["PLA", "PETG"],
-    processes: ["FDM"],
-    tags: ["FDM", "PLA/PETG", "Student friendly"],
-  },
-  {
-    id: 2,
-    name: "ForgeLab Etobicoke",
-    machine: "Bambu X1 Carbon",
-    distance: "5.8 miles away",
-    distanceMiles: 5.8,
-    rating: "4.8",
-    eta: "Ships tomorrow",
-    leadDays: 2,
-    capacity: "12 parts/day",
-    materials: ["PLA", "ABS", "PETG"],
-    processes: ["FDM"],
-    tags: ["FDM", "ABS", "Tight tolerance"],
-  },
-  {
-    id: 3,
-    name: "Northline CNC & Print",
-    machine: "Shapeoko Pro CNC",
-    distance: "8.1 miles away",
-    distanceMiles: 8.1,
-    rating: "4.7",
-    eta: "2 day queue",
-    leadDays: 3,
-    capacity: "Batch runs",
-    materials: ["ABS", "PETG"],
-    processes: ["CNC", "FDM"],
-    tags: ["CNC", "Nylon", "Batch runs"],
-  },
-];
 
 const navItems: { key: ViewKey; label: string; icon: LucideIcon }[] = [
   { key: "new-job", label: "New Job", icon: UploadCloud },
@@ -288,6 +99,7 @@ export default function Home() {
     setSavedFiles(readStorage<ParsedCadFile[]>(filesStorageKey, []));
     setJobs(readStorage<JobSubmission[]>(jobsStorageKey, []));
     setStorageReady(true);
+    void refreshBackendState();
   }, []);
 
   useEffect(() => {
@@ -307,55 +119,14 @@ export default function Home() {
       return null;
     }
 
-    const selectedMaterial =
-      materialOptions.find((option) => option.name === material) ??
-      materialOptions[0];
-    const selectedInfill =
-      infillOptions.find((option) => option.label === infill) ??
-      infillOptions[0];
-    const selectedFinish =
-      finishOptions.find((option) => option.label === finish) ??
-      finishOptions[1];
-    const selectedTolerance =
-      toleranceOptions.find((option) => option.label === toleranceTarget) ??
-      toleranceOptions[0];
-    const selectedUrgency =
-      urgencyOptions.find((option) => option.label === urgency) ??
-      urgencyOptions[0];
-    const safeQuantity = clamp(Math.round(quantity), 1, 250);
-    const setupFee = activeFile.source === "Exact STL mesh" ? 4.99 : 9.5;
-    const materialCost = activeFile.volume * selectedMaterial.rate;
-    const perPartBase =
-      materialCost *
-      selectedInfill.multiplier *
-      selectedFinish.multiplier *
-      selectedTolerance.multiplier;
-    const quantityDiscount =
-      safeQuantity >= 25 ? 0.18 : safeQuantity >= 10 ? 0.12 : safeQuantity >= 4 ? 0.06 : 0;
-    const discountedParts = perPartBase * safeQuantity * (1 - quantityDiscount);
-    const urgencyFee =
-      selectedUrgency.label === "Rush"
-        ? Math.max(8, discountedParts * (selectedUrgency.multiplier - 1))
-        : 0;
-    const platformFee = Math.max(1.5, (discountedParts + setupFee + urgencyFee) * 0.035);
-    const price = discountedParts + setupFee + urgencyFee + platformFee;
-
-    return {
-      price,
-      unitPrice: price / safeQuantity,
-      materialCost,
-      setupFee,
-      finishFee: perPartBase * safeQuantity - materialCost * selectedInfill.multiplier * safeQuantity,
-      urgencyFee,
-      platformFee,
-      quantityDiscount,
-      selectedMaterial,
-      selectedInfill,
-      selectedFinish,
-      selectedTolerance,
-      selectedUrgency,
-      turnaround: selectedUrgency.leadTime,
-    };
+    return calculateQuote(activeFile, {
+      finish,
+      infill,
+      material,
+      quantity,
+      toleranceTarget,
+      urgency,
+    });
   }, [activeFile, finish, infill, material, quantity, toleranceTarget, urgency]);
 
   const matchedMakers = useMemo(
@@ -401,11 +172,19 @@ export default function Home() {
       setProgress(28);
       const parsed = await parseCadFile(file);
       setProgress(76);
+      let persisted = parsed;
+
+      try {
+        persisted = await persistParsedFile(file, parsed);
+      } catch {
+        persisted = parsed;
+      }
+
       await delay(220);
       setProgress(100);
-      setActiveFile(parsed);
+      setActiveFile(persisted);
       setSavedFiles((current) =>
-        [parsed, ...current.filter((item) => item.id !== parsed.id)].slice(
+        [persisted, ...current.filter((item) => item.id !== persisted.id)].slice(
           0,
           maxSavedFiles,
         ),
@@ -433,7 +212,7 @@ export default function Home() {
     event.target.value = "";
   }
 
-  function sendJob(maker: Maker) {
+  async function sendJob(maker: Maker) {
     if (!activeFile || !quote) {
       return;
     }
@@ -465,6 +244,18 @@ export default function Home() {
 
     setSentMakerId(maker.id);
     setJobs((current) => [job, ...current].slice(0, 12));
+
+    try {
+      const savedJob = await persistJob(job);
+      setJobs((current) =>
+        [savedJob, ...current.filter((item) => item.id !== savedJob.id)].slice(
+          0,
+          12,
+        ),
+      );
+    } catch {
+      // Local state already carries the sent job if the API is unavailable.
+    }
   }
 
   function loadSavedFile(file: ParsedCadFile) {
@@ -472,6 +263,29 @@ export default function Home() {
     setSentMakerId(null);
     setParseError(null);
     setView("new-job");
+  }
+
+  async function refreshBackendState() {
+    try {
+      const [filesResponse, jobsResponse] = await Promise.all([
+        fetch("/api/files"),
+        fetch("/api/jobs"),
+      ]);
+      const [filesPayload, jobsPayload] = await Promise.all([
+        filesResponse.ok ? filesResponse.json() : Promise.resolve({}),
+        jobsResponse.ok ? jobsResponse.json() : Promise.resolve({}),
+      ]);
+
+      if (Array.isArray(filesPayload.files)) {
+        setSavedFiles(filesPayload.files.slice(0, maxSavedFiles));
+      }
+
+      if (Array.isArray(jobsPayload.jobs)) {
+        setJobs(jobsPayload.jobs.slice(0, 12));
+      }
+    } catch {
+      // localStorage remains the offline/demo fallback.
+    }
   }
 
   return (
@@ -849,6 +663,41 @@ export default function Home() {
   );
 }
 
+async function persistParsedFile(file: File, parsed: ParsedCadFile) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("metadata", JSON.stringify(parsed));
+
+  const response = await fetch("/api/uploads", {
+    body: formData,
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error("Mesh could not save the uploaded CAD file.");
+  }
+
+  const payload = (await response.json()) as { file?: ParsedCadFile };
+
+  return payload.file ?? parsed;
+}
+
+async function persistJob(job: JobSubmission) {
+  const response = await fetch("/api/jobs", {
+    body: JSON.stringify({ job }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error("Mesh could not save the sent job.");
+  }
+
+  const payload = (await response.json()) as { job?: JobSubmission };
+
+  return payload.job ?? job;
+}
+
 function JobSpecPanel({
   projectName,
   quantity,
@@ -1138,7 +987,7 @@ function MakerMatchPanel({
   matches: MakerMatch[];
   quoteReady: boolean;
   sentMakerId: number | null;
-  onSend: (maker: Maker) => void;
+  onSend: (maker: Maker) => void | Promise<void>;
 }) {
   return (
     <section className="rounded-md border border-zinc-200 bg-white p-5 shadow-panel">
@@ -1181,7 +1030,7 @@ function MakerCard({
   match: MakerMatch;
   quoteReady: boolean;
   sentMakerId: number | null;
-  onSend: (maker: Maker) => void;
+  onSend: (maker: Maker) => void | Promise<void>;
 }) {
   const { maker } = match;
   const isSent = sentMakerId === maker.id;
@@ -1241,7 +1090,7 @@ function MakerCard({
           className="inline-flex h-9 items-center gap-2 rounded-md bg-graphite px-3 text-xs font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
           data-testid={`send-job-${maker.id}`}
           disabled={!activeFile || !quoteReady || !match.compatible}
-          onClick={() => onSend(maker)}
+          onClick={() => void onSend(maker)}
           type="button"
         >
           {isSent ? (
@@ -1432,78 +1281,6 @@ function QuoteLine({ label, value }: { label: string; value: string }) {
   );
 }
 
-function scoreMaker(
-  maker: Maker,
-  spec: {
-    material: MaterialKey;
-    quantity: number;
-    toleranceTarget: ToleranceKey;
-    urgency: UrgencyKey;
-  },
-): MakerMatch {
-  const reasons: string[] = [];
-  let score = 55;
-  const compatibleMaterial = maker.materials.includes(spec.material);
-  const supportsRush = maker.leadDays <= 2;
-  const supportsTightTolerance =
-    spec.toleranceTarget === "Standard" || maker.tags.includes("Tight tolerance");
-  const capacityNumber = Number.parseInt(maker.capacity, 10);
-  const capacityFits =
-    Number.isNaN(capacityNumber) || spec.quantity <= capacityNumber * 3;
-
-  if (compatibleMaterial) {
-    score += 18;
-    reasons.push(`${spec.material} available`);
-  } else {
-    score -= 22;
-    reasons.push(`${spec.material} requires review`);
-  }
-
-  if (maker.distanceMiles <= 3) {
-    score += 10;
-    reasons.push("closest pickup");
-  } else if (maker.distanceMiles <= 6) {
-    score += 6;
-    reasons.push("nearby");
-  }
-
-  if (spec.urgency === "Rush") {
-    if (supportsRush) {
-      score += 12;
-      reasons.push("rush capable");
-    } else {
-      score -= 12;
-      reasons.push("rush queue risk");
-    }
-  } else {
-    score += Math.max(0, 8 - maker.leadDays * 2);
-    reasons.push(maker.eta.toLowerCase());
-  }
-
-  if (supportsTightTolerance) {
-    score += 8;
-    reasons.push("tolerance fit");
-  } else {
-    score -= 10;
-    reasons.push("tolerance review");
-  }
-
-  if (capacityFits) {
-    score += 7;
-    reasons.push("capacity fit");
-  } else {
-    score -= 8;
-    reasons.push("batch capacity review");
-  }
-
-  return {
-    maker,
-    score: Math.round(clamp(score, 10, 99)),
-    compatible: compatibleMaterial && supportsTightTolerance && capacityFits,
-    reasons,
-  };
-}
-
 async function parseCadFile(file: File): Promise<ParsedCadFile> {
   const type = getCadFileType(file.name);
 
@@ -1690,20 +1467,6 @@ function signedTriangleVolume(a: Vector3, b: Vector3, c: Vector3) {
   );
 }
 
-function getCadFileType(name: string): CadFileType | null {
-  const lowerName = name.toLowerCase();
-
-  if (lowerName.endsWith(".stl")) {
-    return "STL";
-  }
-
-  if (lowerName.endsWith(".step") || lowerName.endsWith(".stp")) {
-    return "STEP";
-  }
-
-  return null;
-}
-
 function createSampleStl() {
   const vertices = [
     [0, 0, 0],
@@ -1765,18 +1528,6 @@ function readStorage<T>(key: string, fallback: T): T {
   }
 }
 
-function formatBytes(bytes: number) {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en", {
     month: "short",
@@ -1784,14 +1535,6 @@ function formatDate(value: string) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
-}
-
-function countMatches(value: string, token: string) {
-  return value.split(token).length - 1;
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
 }
 
 function delay(ms: number) {

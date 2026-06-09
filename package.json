@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "check": "npm run lint && npm run typecheck && npm run build && npm audit --audit-level=moderate",
-    "lint": "eslint app next.config.ts tailwind.config.ts eslint.config.mjs postcss.config.mjs",
+    "lint": "eslint app lib next.config.ts tailwind.config.ts eslint.config.mjs postcss.config.mjs",
     "typecheck": "tsc --noEmit"
   },
   "engines": {
@@ -16,12 +16,14 @@
   "dependencies": {
     "lucide-react": "^0.468.0",
     "next": "^15.0.0",
+    "pg": "^8.21.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
     "@types/node": "^20.11.30",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.19",
