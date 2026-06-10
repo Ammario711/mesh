@@ -1,12 +1,17 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { JobSubmission, ParsedCadFile } from "./domain";
+import type {
+  JobSubmission,
+  MakerApplication,
+  ParsedCadFile,
+} from "./domain";
 import { getPostgresPool, hasDatabaseUrl } from "./postgres";
 
 type MeshDatabase = {
   files: ParsedCadFile[];
   jobs: JobSubmission[];
+  makerApplications: MakerApplication[];
   updatedAt: string;
   version: 1;
 };
@@ -18,11 +23,16 @@ export type MarketplaceStore = {
   upsertFile: (file: ParsedCadFile) => Promise<ParsedCadFile>;
   listJobs: () => Promise<JobSubmission[]>;
   createJob: (job: JobSubmission) => Promise<JobSubmission>;
+  listMakerApplications: () => Promise<MakerApplication[]>;
+  createMakerApplication: (
+    application: MakerApplication,
+  ) => Promise<MakerApplication>;
 };
 
 const emptyDatabase = (): MeshDatabase => ({
   files: [],
   jobs: [],
+  makerApplications: [],
   updatedAt: new Date().toISOString(),
   version: 1,
 });
@@ -103,6 +113,28 @@ class FileMarketplaceStore implements MarketplaceStore {
     return job;
   }
 
+  async listMakerApplications() {
+    const database = await this.read();
+
+    return [...database.makerApplications].sort(
+      (a, b) =>
+        new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime(),
+    );
+  }
+
+  async createMakerApplication(application: MakerApplication) {
+    const database = await this.read();
+    database.makerApplications = [
+      application,
+      ...database.makerApplications.filter(
+        (current) => current.id !== application.id,
+      ),
+    ].slice(0, 500);
+    await this.write(database);
+
+    return application;
+  }
+
   private async read(): Promise<MeshDatabase> {
     try {
       const raw = await readFile(this.databasePath, "utf8");
@@ -111,6 +143,9 @@ class FileMarketplaceStore implements MarketplaceStore {
       return {
         files: Array.isArray(parsed.files) ? parsed.files : [],
         jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
+        makerApplications: Array.isArray(parsed.makerApplications)
+          ? parsed.makerApplications
+          : [],
         updatedAt: parsed.updatedAt ?? new Date().toISOString(),
         version: 1,
       };
@@ -200,6 +235,30 @@ class PostgresMarketplaceStore implements MarketplaceStore {
     return job;
   }
 
+  async listMakerApplications() {
+    await this.init();
+    const result = await getPostgresPool().query<{
+      payload: MakerApplication;
+    }>(
+      "select payload from mesh_maker_applications order by created_at desc limit 500",
+    );
+
+    return result.rows.map((row) => row.payload);
+  }
+
+  async createMakerApplication(application: MakerApplication) {
+    await this.init();
+    await getPostgresPool().query(
+      `insert into mesh_maker_applications (id, payload, created_at, updated_at)
+       values ($1, $2::jsonb, now(), now())
+       on conflict (id) do update
+       set payload = excluded.payload, updated_at = now()`,
+      [application.id, JSON.stringify(application)],
+    );
+
+    return application;
+  }
+
   private init() {
     if (!this.ready) {
       this.ready = getPostgresPool().query(`
@@ -211,6 +270,13 @@ class PostgresMarketplaceStore implements MarketplaceStore {
         );
 
         create table if not exists mesh_jobs (
+          id text primary key,
+          payload jsonb not null,
+          created_at timestamptz not null default now(),
+          updated_at timestamptz not null default now()
+        );
+
+        create table if not exists mesh_maker_applications (
           id text primary key,
           payload jsonb not null,
           created_at timestamptz not null default now(),

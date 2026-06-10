@@ -374,6 +374,12 @@ export default function Home() {
               </div>
             </div>
             <div className="flex flex-wrap gap-3 px-1 text-xs font-semibold text-zinc-500">
+              <a className="hover:text-zinc-300" href="/makers">
+                Apply
+              </a>
+              <a className="hover:text-zinc-300" href="/status">
+                Status
+              </a>
               <a className="hover:text-zinc-300" href="/trust">
                 Trust
               </a>

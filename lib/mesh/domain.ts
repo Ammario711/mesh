@@ -52,6 +52,28 @@ export type Maker = {
   tags: string[];
 };
 
+export type MakerApplicationStatus =
+  | "Submitted"
+  | "Reviewing"
+  | "Approved"
+  | "Declined";
+
+export type MakerApplication = {
+  id: string;
+  shopName: string;
+  contactName: string;
+  email: string;
+  city: string;
+  postalCode: string;
+  equipment: string;
+  materials: string[];
+  processes: string[];
+  capacity: string;
+  notes: string;
+  status: MakerApplicationStatus;
+  submittedAt: string;
+};
+
 export type ParsedCadFile = {
   id: string;
   name: string;

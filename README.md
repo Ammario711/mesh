@@ -54,6 +54,7 @@ Production write routes reject ephemeral serverless storage unless `MESH_ALLOW_E
 - Persist parsed files and sent job records in local browser storage.
 - Persist parsed CAD files and sent jobs through backend API routes.
 - Send a quote to a compatible local maker and review richer job activity.
+- Accept local maker/operator applications through a persisted onboarding form.
 
 ## Backend API
 
@@ -67,6 +68,8 @@ Production write routes reject ephemeral serverless storage unless `MESH_ALLOW_E
 - `POST /api/quotes` - calculate line-item quote and maker matches.
 - `GET /api/jobs` - stored sent jobs.
 - `POST /api/jobs` - save a sent RFQ/job.
+- `GET /api/maker-applications` - stored maker applications.
+- `POST /api/maker-applications` - save a maker onboarding application.
 
 ## Environment
 
@@ -89,6 +92,8 @@ PGSSLMODE=
 ## Public Pages
 
 - `/trust` - CAD/IP handling, prohibited jobs, maker expectations, and reporting.
+- `/makers` - maker/operator onboarding application.
+- `/status` - production readiness and launch status.
 - `/privacy` - data handling for CAD files, RFQs, localStorage, and job records.
 - `/terms` - marketplace terms, quote estimates, CAD rights, prohibited work, and payments status.
 

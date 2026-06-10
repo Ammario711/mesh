@@ -4,6 +4,7 @@ import {
   getCadFileType,
   infillOptions,
   materialOptions,
+  type MakerApplication,
   normalizeQuantity,
   type FinishKey,
   type InfillKey,
@@ -98,6 +99,37 @@ export function parseJobSubmission(input: unknown): JobSubmission {
   };
 }
 
+export function parseMakerApplication(input: unknown): MakerApplication {
+  const value = asRecord(input);
+  const submittedAt = readString(value.submittedAt, new Date().toISOString());
+  const shopName = readString(value.shopName, "");
+  const email = readString(value.email, "").toLowerCase();
+
+  if (!shopName) {
+    throw new Error("Shop name is required.");
+  }
+
+  if (!isLikelyEmail(email)) {
+    throw new Error("A valid contact email is required.");
+  }
+
+  return {
+    id: readString(value.id, `maker-application-${Date.now()}`),
+    shopName,
+    contactName: readString(value.contactName, ""),
+    email,
+    city: readString(value.city, ""),
+    postalCode: readString(value.postalCode, ""),
+    equipment: readString(value.equipment, ""),
+    materials: readStringList(value.materials),
+    processes: readStringList(value.processes),
+    capacity: readString(value.capacity, ""),
+    notes: readString(value.notes, ""),
+    status: "Submitted",
+    submittedAt,
+  };
+}
+
 export function parseJsonBody(input: unknown) {
   const value = asRecord(input);
 
@@ -156,4 +188,28 @@ function readNumber(input: unknown, fallback: number) {
   const value = typeof input === "number" ? input : Number(input);
 
   return Number.isFinite(value) ? value : fallback;
+}
+
+function readStringList(input: unknown) {
+  if (Array.isArray(input)) {
+    return input
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 12);
+  }
+
+  if (typeof input === "string") {
+    return input
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 12);
+  }
+
+  return [];
+}
+
+function isLikelyEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
