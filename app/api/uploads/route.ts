@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  ephemeralWriteError,
+  shouldRejectEphemeralWrites,
+} from "../../../lib/mesh/config";
 import { getMarketplaceStore } from "../../../lib/mesh/store";
 import { saveCadUpload } from "../../../lib/mesh/upload-storage";
 import { parseParsedCadFile } from "../../../lib/mesh/validation";
@@ -7,6 +11,10 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
+    if (shouldRejectEphemeralWrites()) {
+      throw ephemeralWriteError();
+    }
+
     const formData = await request.formData();
     const uploadedFile = formData.get("file");
     const metadata = formData.get("metadata");
@@ -42,7 +50,13 @@ export async function POST(request: Request) {
             ? error.message
             : "Mesh could not upload that CAD file.",
       },
-      { status: 400 },
+      {
+        status:
+          error instanceof Error &&
+          error.message.includes("Production storage")
+            ? 503
+            : 400,
+      },
     );
   }
 }

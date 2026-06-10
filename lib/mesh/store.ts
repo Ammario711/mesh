@@ -1,8 +1,8 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import pg from "pg";
 import type { JobSubmission, ParsedCadFile } from "./domain";
+import { getPostgresPool, hasDatabaseUrl } from "./postgres";
 
 type MeshDatabase = {
   files: ParsedCadFile[];
@@ -31,8 +31,8 @@ let store: MarketplaceStore | null = null;
 
 export function getMarketplaceStore() {
   if (!store) {
-    store = process.env.DATABASE_URL
-      ? new PostgresMarketplaceStore(process.env.DATABASE_URL)
+    store = hasDatabaseUrl()
+      ? new PostgresMarketplaceStore()
       : new FileMarketplaceStore(resolveDatabasePath());
   }
 
@@ -40,7 +40,7 @@ export function getMarketplaceStore() {
 }
 
 export function getStorageMode() {
-  return process.env.DATABASE_URL ? "postgres" : "file";
+  return hasDatabaseUrl() ? "postgres" : "file";
 }
 
 function resolveDatabasePath() {
@@ -144,23 +144,11 @@ class FileMarketplaceStore implements MarketplaceStore {
 
 class PostgresMarketplaceStore implements MarketplaceStore {
   adapter = "postgres" as const;
-  private pool: pg.Pool;
   private ready: Promise<void> | null = null;
-
-  constructor(connectionString: string) {
-    this.pool = new pg.Pool({
-      connectionString,
-      max: Number(process.env.MESH_PG_POOL_MAX ?? 5),
-      ssl:
-        process.env.PGSSLMODE === "disable" || connectionString.includes("localhost")
-          ? false
-          : { rejectUnauthorized: false },
-    });
-  }
 
   async listFiles() {
     await this.init();
-    const result = await this.pool.query<{ payload: ParsedCadFile }>(
+    const result = await getPostgresPool().query<{ payload: ParsedCadFile }>(
       "select payload from mesh_files order by created_at desc limit 200",
     );
 
@@ -169,7 +157,7 @@ class PostgresMarketplaceStore implements MarketplaceStore {
 
   async getFile(id: string) {
     await this.init();
-    const result = await this.pool.query<{ payload: ParsedCadFile }>(
+    const result = await getPostgresPool().query<{ payload: ParsedCadFile }>(
       "select payload from mesh_files where id = $1 limit 1",
       [id],
     );
@@ -179,7 +167,7 @@ class PostgresMarketplaceStore implements MarketplaceStore {
 
   async upsertFile(file: ParsedCadFile) {
     await this.init();
-    await this.pool.query(
+    await getPostgresPool().query(
       `insert into mesh_files (id, payload, created_at, updated_at)
        values ($1, $2::jsonb, now(), now())
        on conflict (id) do update
@@ -192,7 +180,7 @@ class PostgresMarketplaceStore implements MarketplaceStore {
 
   async listJobs() {
     await this.init();
-    const result = await this.pool.query<{ payload: JobSubmission }>(
+    const result = await getPostgresPool().query<{ payload: JobSubmission }>(
       "select payload from mesh_jobs order by created_at desc limit 500",
     );
 
@@ -201,7 +189,7 @@ class PostgresMarketplaceStore implements MarketplaceStore {
 
   async createJob(job: JobSubmission) {
     await this.init();
-    await this.pool.query(
+    await getPostgresPool().query(
       `insert into mesh_jobs (id, payload, created_at, updated_at)
        values ($1, $2::jsonb, now(), now())
        on conflict (id) do update
@@ -214,7 +202,7 @@ class PostgresMarketplaceStore implements MarketplaceStore {
 
   private init() {
     if (!this.ready) {
-      this.ready = this.pool.query(`
+      this.ready = getPostgresPool().query(`
         create table if not exists mesh_files (
           id text primary key,
           payload jsonb not null,

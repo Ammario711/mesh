@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { getCadFileType, isSupportedCadFile } from "./domain";
+import { getPostgresPool, hasDatabaseUrl } from "./postgres";
 
 export type StoredUpload = {
   contentType: string;
@@ -11,19 +12,43 @@ export type StoredUpload = {
 };
 
 const defaultMaxUploadMb = 80;
+let uploadsReady: Promise<void> | null = null;
 
 export async function saveCadUpload(file: File, fileId: string): Promise<StoredUpload> {
   validateCadUpload(file);
-  const uploadDirectory = resolveUploadDirectory();
   const storageKey = `${Date.now()}-${fileId}-${safeFileName(file.name)}`;
-  const uploadPath = path.join(uploadDirectory, storageKey);
   const buffer = Buffer.from(await file.arrayBuffer());
+  const contentType = file.type || contentTypeForCadFile(file.name);
 
+  if (hasDatabaseUrl()) {
+    await initPostgresUploads();
+    await getPostgresPool().query(
+      `insert into mesh_uploads
+        (storage_key, file_name, content_type, size_bytes, bytes, created_at)
+       values ($1, $2, $3, $4, $5, now())
+       on conflict (storage_key) do update
+       set file_name = excluded.file_name,
+           content_type = excluded.content_type,
+           size_bytes = excluded.size_bytes,
+           bytes = excluded.bytes`,
+      [storageKey, file.name, contentType, file.size, buffer],
+    );
+
+    return {
+      contentType,
+      downloadUrl: `/api/uploads/${encodeURIComponent(storageKey)}`,
+      sizeBytes: file.size,
+      storageKey,
+    };
+  }
+
+  const uploadDirectory = resolveUploadDirectory();
+  const uploadPath = path.join(uploadDirectory, storageKey);
   await mkdir(uploadDirectory, { recursive: true });
   await writeFile(uploadPath, buffer);
 
   return {
-    contentType: file.type || contentTypeForCadFile(file.name),
+    contentType,
     downloadUrl: `/api/uploads/${encodeURIComponent(storageKey)}`,
     sizeBytes: file.size,
     storageKey,
@@ -32,6 +57,28 @@ export async function saveCadUpload(file: File, fileId: string): Promise<StoredU
 
 export async function readCadUpload(storageKey: string) {
   const safeKey = path.basename(storageKey);
+
+  if (hasDatabaseUrl()) {
+    await initPostgresUploads();
+    const result = await getPostgresPool().query<{
+      bytes: Buffer;
+      content_type: string;
+    }>(
+      "select bytes, content_type from mesh_uploads where storage_key = $1 limit 1",
+      [safeKey],
+    );
+    const upload = result.rows[0];
+
+    if (!upload) {
+      throw new Error("CAD upload not found.");
+    }
+
+    return {
+      buffer: upload.bytes,
+      contentType: upload.content_type,
+    };
+  }
+
   const filePath = path.join(resolveUploadDirectory(), safeKey);
   const buffer = await readFile(filePath);
 
@@ -85,4 +132,21 @@ function contentTypeForCadFile(name: string) {
   }
 
   return "model/step";
+}
+
+function initPostgresUploads() {
+  if (!uploadsReady) {
+    uploadsReady = getPostgresPool().query(`
+      create table if not exists mesh_uploads (
+        storage_key text primary key,
+        file_name text not null,
+        content_type text not null,
+        size_bytes integer not null,
+        bytes bytea not null,
+        created_at timestamptz not null default now()
+      );
+    `).then(() => undefined);
+  }
+
+  return uploadsReady;
 }

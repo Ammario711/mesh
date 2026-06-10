@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  ephemeralWriteError,
+  shouldRejectEphemeralWrites,
+} from "../../../lib/mesh/config";
 import { getMarketplaceStore } from "../../../lib/mesh/store";
 import { parseJobSubmission, parseJsonBody } from "../../../lib/mesh/validation";
 
@@ -13,6 +17,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if (shouldRejectEphemeralWrites()) {
+      throw ephemeralWriteError();
+    }
+
     const body = parseJsonBody(await request.json());
     const job = parseJobSubmission(body.job ?? body);
     const store = getMarketplaceStore();
@@ -34,7 +42,13 @@ export async function POST(request: Request) {
             ? error.message
             : "Mesh could not save that job.",
       },
-      { status: 400 },
+      {
+        status:
+          error instanceof Error &&
+          error.message.includes("Production storage")
+            ? 503
+            : 400,
+      },
     );
   }
 }

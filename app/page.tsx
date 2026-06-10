@@ -49,6 +49,10 @@ import {
 } from "../lib/mesh/domain";
 
 type ViewKey = "new-job" | "my-files" | "local-makers";
+type ApiHealth = {
+  ready: boolean;
+  storage: "file" | "postgres";
+};
 
 type GeometryResult = {
   volume: number;
@@ -94,6 +98,7 @@ export default function Home() {
   const [projectName, setProjectName] = useState("Bracket prototype");
   const [notes, setNotes] = useState("");
   const [sentMakerId, setSentMakerId] = useState<number | null>(null);
+  const [apiHealth, setApiHealth] = useState<ApiHealth | null>(null);
 
   useEffect(() => {
     setSavedFiles(readStorage<ParsedCadFile[]>(filesStorageKey, []));
@@ -267,14 +272,26 @@ export default function Home() {
 
   async function refreshBackendState() {
     try {
-      const [filesResponse, jobsResponse] = await Promise.all([
+      const [healthResponse, filesResponse, jobsResponse] = await Promise.all([
+        fetch("/api/health", { cache: "no-store" }),
         fetch("/api/files"),
         fetch("/api/jobs"),
       ]);
-      const [filesPayload, jobsPayload] = await Promise.all([
+      const [healthPayload, filesPayload, jobsPayload] = await Promise.all([
+        healthResponse.ok ? healthResponse.json() : Promise.resolve({}),
         filesResponse.ok ? filesResponse.json() : Promise.resolve({}),
         jobsResponse.ok ? jobsResponse.json() : Promise.resolve({}),
       ]);
+
+      if (
+        typeof healthPayload.ready === "boolean" &&
+        (healthPayload.storage === "file" || healthPayload.storage === "postgres")
+      ) {
+        setApiHealth({
+          ready: healthPayload.ready,
+          storage: healthPayload.storage,
+        });
+      }
 
       if (Array.isArray(filesPayload.files)) {
         setSavedFiles(filesPayload.files.slice(0, maxSavedFiles));
@@ -334,15 +351,39 @@ export default function Home() {
             })}
           </nav>
 
-          <div className="mt-auto rounded-md border border-zinc-700 bg-zinc-900 p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <ShieldCheck className="h-4 w-4 text-weld" />
-              Verified network
+          <div className="mt-auto space-y-3">
+            <div className="rounded-md border border-zinc-700 bg-zinc-900 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <ShieldCheck className="h-4 w-4 text-weld" />
+                Verified network
+              </div>
+              <p className="mt-2 text-sm leading-6 text-zinc-400">
+                {makers.length} makers loaded, {savedFiles.length} files saved,
+                {jobs.length} jobs sent on this device.
+              </p>
+              <div
+                className={`mt-3 rounded-md px-3 py-2 text-xs font-semibold ${
+                  apiHealth?.ready
+                    ? "bg-emerald-950/50 text-emerald-200 ring-1 ring-emerald-800"
+                    : "bg-amber-950/50 text-amber-200 ring-1 ring-amber-800"
+                }`}
+              >
+                {apiHealth?.ready
+                  ? `Production ready - ${apiHealth.storage}`
+                  : `Setup needed - ${apiHealth?.storage ?? "checking"}`}
+              </div>
             </div>
-            <p className="mt-2 text-sm leading-6 text-zinc-400">
-              {makers.length} makers loaded, {savedFiles.length} files saved,
-              {jobs.length} jobs sent on this device.
-            </p>
+            <div className="flex flex-wrap gap-3 px-1 text-xs font-semibold text-zinc-500">
+              <a className="hover:text-zinc-300" href="/trust">
+                Trust
+              </a>
+              <a className="hover:text-zinc-300" href="/privacy">
+                Privacy
+              </a>
+              <a className="hover:text-zinc-300" href="/terms">
+                Terms
+              </a>
+            </div>
           </div>
         </aside>
 

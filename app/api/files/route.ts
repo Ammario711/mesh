@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  ephemeralWriteError,
+  shouldRejectEphemeralWrites,
+} from "../../../lib/mesh/config";
 import { getMarketplaceStore } from "../../../lib/mesh/store";
 import { parseJsonBody, parseParsedCadFile } from "../../../lib/mesh/validation";
 
@@ -13,6 +17,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if (shouldRejectEphemeralWrites()) {
+      throw ephemeralWriteError();
+    }
+
     const body = parseJsonBody(await request.json());
     const file = parseParsedCadFile(body.file ?? body);
     const store = getMarketplaceStore();
@@ -35,6 +43,11 @@ function errorResponse(error: unknown) {
           ? error.message
           : "Mesh could not save that CAD file.",
     },
-    { status: 400 },
+    {
+      status:
+        error instanceof Error && error.message.includes("Production storage")
+          ? 503
+          : 400,
+    },
   );
 }

@@ -11,7 +11,7 @@ export async function GET(
     const { storageKey } = await params;
     const upload = await readCadUpload(decodeURIComponent(storageKey));
 
-    return new Response(upload.buffer, {
+    return new Response(new Uint8Array(upload.buffer), {
       headers: {
         "content-type": upload.contentType,
         "content-disposition": `attachment; filename="${safeDownloadName(storageKey)}"`,

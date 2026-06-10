@@ -3,8 +3,14 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://mesh-marketplace-mvp.vercel.app"),
-  title: "Mesh",
-  description: "Decentralized B2B manufacturing marketplace MVP",
+  applicationName: "Mesh",
+  title: {
+    default: "Mesh",
+    template: "%s | Mesh",
+  },
+  description:
+    "Upload CAD files, get manufacturing quotes, and match with local 3D printer and CNC operators.",
+  manifest: "/manifest.webmanifest",
   openGraph: {
     title: "Mesh",
     description:
@@ -18,6 +24,9 @@ export const metadata: Metadata = {
     title: "Mesh",
     description:
       "A decentralized B2B manufacturing marketplace for students, startups, and local makers.",
+  },
+  alternates: {
+    canonical: "/",
   },
 };
 
