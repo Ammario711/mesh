@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  ephemeralWriteError,
+  shouldRejectEphemeralWrites,
+} from "../../../../lib/mesh/config";
 import { createStripeConnectOnboarding } from "../../../../lib/mesh/payments";
 import { recordAuditEvent } from "../../../../lib/mesh/observability";
 import { getCurrentSession, requireRole } from "../../../../lib/mesh/server-auth";
@@ -13,6 +17,11 @@ export async function POST() {
       "maker",
       "admin",
     ]);
+
+    if (shouldRejectEphemeralWrites()) {
+      throw ephemeralWriteError();
+    }
+
     const onboarding = await createStripeConnectOnboarding(session.email);
     const store = getMarketplaceStore();
     const user = await store.getUserByEmail(session.email);

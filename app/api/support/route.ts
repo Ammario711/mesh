@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  ephemeralWriteError,
+  shouldRejectEphemeralWrites,
+} from "../../../lib/mesh/config";
 import { notifySupport } from "../../../lib/mesh/notifications";
 import { recordAuditEvent } from "../../../lib/mesh/observability";
 import {
@@ -16,6 +20,10 @@ export async function POST(request: Request) {
       limit: 6,
       windowMs: 1000 * 60 * 60,
     });
+
+    if (shouldRejectEphemeralWrites()) {
+      throw ephemeralWriteError();
+    }
 
     const body = parseJsonBody(await request.json());
     rejectBotSubmission(body);

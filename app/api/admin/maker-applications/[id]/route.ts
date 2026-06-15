@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  ephemeralWriteError,
+  shouldRejectEphemeralWrites,
+} from "../../../../../lib/mesh/config";
 import { sendEmail } from "../../../../../lib/mesh/notifications";
 import { recordAuditEvent } from "../../../../../lib/mesh/observability";
 import { getCurrentSession, requireRole } from "../../../../../lib/mesh/server-auth";
@@ -15,6 +19,11 @@ export async function PATCH(
 ) {
   try {
     const session = requireRole(await getCurrentSession(), ["admin"]);
+
+    if (shouldRejectEphemeralWrites()) {
+      throw ephemeralWriteError();
+    }
+
     const { id } = await params;
     const body = parseJsonBody(await request.json());
     const status = parseStatus(body.status);

@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  ephemeralWriteError,
+  shouldRejectEphemeralWrites,
+} from "../../../../../../lib/mesh/config";
 import { createId } from "../../../../../../lib/mesh/auth";
 import type { JobStatus } from "../../../../../../lib/mesh/domain";
 import { notifySupport } from "../../../../../../lib/mesh/notifications";
@@ -19,6 +23,11 @@ export async function PATCH(
 ) {
   try {
     const session = requireRole(await getCurrentSession(), ["admin", "maker"]);
+
+    if (shouldRejectEphemeralWrites()) {
+      throw ephemeralWriteError();
+    }
+
     const { id } = await params;
     const body = parseJsonBody(await request.json());
     const status = parseJobStatus(body.status);

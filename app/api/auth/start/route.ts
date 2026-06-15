@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  ephemeralWriteError,
+  shouldRejectEphemeralWrites,
+} from "../../../../lib/mesh/config";
 import { createAuthChallenge, normalizeEmail } from "../../../../lib/mesh/auth";
 import type { UserRole } from "../../../../lib/mesh/domain";
 import { sendEmail } from "../../../../lib/mesh/notifications";
@@ -14,6 +18,11 @@ export async function POST(request: Request) {
       limit: 5,
       windowMs: 1000 * 60 * 15,
     });
+
+    if (shouldRejectEphemeralWrites()) {
+      throw ephemeralWriteError();
+    }
+
     const body = parseJsonBody(await request.json());
     const email = normalizeEmail(String(body.email ?? ""));
     const requestedRole = parseRole(body.role);

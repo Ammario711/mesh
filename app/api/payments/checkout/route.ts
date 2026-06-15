@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import {
+  ephemeralWriteError,
+  shouldRejectEphemeralWrites,
+} from "../../../../lib/mesh/config";
+import {
   createPaymentRecord,
   createStripeCheckoutSession,
 } from "../../../../lib/mesh/payments";
@@ -17,6 +21,11 @@ export async function POST(request: Request) {
       "buyer",
       "admin",
     ]);
+
+    if (shouldRejectEphemeralWrites()) {
+      throw ephemeralWriteError();
+    }
+
     const body = parseJsonBody(await request.json());
     const jobId = String(body.jobId ?? "");
     const store = getMarketplaceStore();

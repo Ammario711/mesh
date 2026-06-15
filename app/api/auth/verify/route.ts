@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  ephemeralWriteError,
+  shouldRejectEphemeralWrites,
+} from "../../../../lib/mesh/config";
 import { verifyAuthChallenge } from "../../../../lib/mesh/auth";
 import { recordAuditEvent } from "../../../../lib/mesh/observability";
 import { setSessionCookie } from "../../../../lib/mesh/server-auth";
@@ -13,6 +17,11 @@ export async function POST(request: Request) {
       limit: 10,
       windowMs: 1000 * 60 * 15,
     });
+
+    if (shouldRejectEphemeralWrites()) {
+      throw ephemeralWriteError();
+    }
+
     const body = parseJsonBody(await request.json());
     const user = await verifyAuthChallenge({
       challengeId: String(body.challengeId ?? ""),

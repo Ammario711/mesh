@@ -1,12 +1,21 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import {
+  ephemeralWriteError,
+  shouldRejectEphemeralWrites,
+} from "../../../../lib/mesh/config";
 import { recordAuditEvent } from "../../../../lib/mesh/observability";
+import { statusForError } from "../../../../lib/mesh/security";
 import { getMarketplaceStore } from "../../../../lib/mesh/store";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
+    if (shouldRejectEphemeralWrites()) {
+      throw ephemeralWriteError();
+    }
+
     const rawBody = await request.text();
     verifyStripeSignature(rawBody, request.headers.get("stripe-signature"));
     const event = JSON.parse(rawBody) as {
@@ -42,7 +51,7 @@ export async function POST(request: Request) {
         error:
           error instanceof Error ? error.message : "Webhook verification failed.",
       },
-      { status: 400 },
+      { status: statusForError(error) },
     );
   }
 }
