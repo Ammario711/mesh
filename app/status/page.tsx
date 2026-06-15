@@ -72,9 +72,11 @@ export default function StatusPage() {
         <div className="mt-6 rounded-md bg-zinc-900 p-5 text-sm leading-7 text-zinc-300">
           <p className="font-semibold text-white">Launch requirements</p>
           <p className="mt-2">
-            Set `DATABASE_URL` and `NEXT_PUBLIC_MESH_SUPPORT_EMAIL` in Vercel,
-            then redeploy. When those are configured, `/api/readiness` returns
-            200 and Mesh accepts durable public RFQs and maker applications.
+            Configure the critical Vercel environment variables for storage,
+            auth, admin access, email, Stripe, Sentry, and legal signoff. When
+            those checks pass, `/api/readiness` returns 200 and Mesh accepts
+            durable public RFQs, maker applications, accounts, checkout, and
+            operations workflows.
           </p>
         </div>
       </section>

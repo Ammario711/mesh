@@ -6,7 +6,7 @@ import {
 } from "../../lib/mesh/config";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | Mesh",
+  title: "Privacy Policy",
   description: "How Mesh handles CAD files, RFQs, job records, and local data.",
 };
 
@@ -35,9 +35,10 @@ export default function PrivacyPage() {
           </h2>
           <p>
             Mesh stores CAD metadata, uploaded CAD files, quote selections, RFQ
-            notes, maker matches, and sent job records. The browser may also
-            keep recent files and jobs in localStorage for continuity on the
-            same device.
+            notes, maker matches, sent job records, account profiles, maker
+            applications, payment records, audit events, and operational error
+            data. The browser may also keep recent files and jobs in
+            localStorage for continuity on the same device.
           </p>
 
           <h2 className="pt-4 text-lg font-semibold text-graphite">
@@ -46,7 +47,8 @@ export default function PrivacyPage() {
           <p>
             Information is used to calculate quotes, match local makers,
             maintain job history, troubleshoot the service, and communicate
-            about requested manufacturing work.
+            about requested manufacturing work, authentication, support,
+            payments, payouts, and trust and safety reviews.
           </p>
 
           <h2 className="pt-4 text-lg font-semibold text-graphite">

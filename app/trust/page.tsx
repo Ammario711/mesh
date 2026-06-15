@@ -6,7 +6,7 @@ import {
 } from "../../lib/mesh/config";
 
 export const metadata: Metadata = {
-  title: "Trust & Safety | Mesh",
+  title: "Trust & Safety",
   description: "Mesh trust, safety, CAD handling, and maker expectations.",
 };
 
@@ -54,7 +54,8 @@ export default function TrustPage() {
             Makers are expected to describe their equipment accurately, reject
             jobs they cannot safely produce, protect confidential files, and
             communicate material, tolerance, and delivery constraints before
-            accepting production work.
+            accepting production work. Maker accounts may require review before
+            receiving public jobs or payouts.
           </p>
 
           <h2 className="pt-4 text-lg font-semibold text-graphite">

@@ -16,6 +16,7 @@ type FormState = {
   postalCode: string;
   processes: string[];
   shopName: string;
+  website: string;
 };
 
 const initialState: FormState = {
@@ -29,6 +30,7 @@ const initialState: FormState = {
   postalCode: "",
   processes: ["FDM"],
   shopName: "",
+  website: "",
 };
 
 export function MakerApplicationForm() {
@@ -52,6 +54,7 @@ export function MakerApplicationForm() {
             id: `maker-application-${Date.now()}`,
             submittedAt: new Date().toISOString(),
           },
+          website: form.website,
         }),
         headers: { "content-type": "application/json" },
         method: "POST",
@@ -99,6 +102,13 @@ export function MakerApplicationForm() {
 
   return (
     <form className="mt-6 space-y-5" onSubmit={submitApplication}>
+      <input
+        autoComplete="off"
+        className="hidden"
+        onChange={(event) => updateField("website", event.target.value)}
+        tabIndex={-1}
+        value={form.website}
+      />
       <div className="grid gap-4 md:grid-cols-2">
         <TextInput
           label="Shop name"

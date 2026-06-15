@@ -72,6 +72,63 @@ export type MakerApplication = {
   notes: string;
   status: MakerApplicationStatus;
   submittedAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+};
+
+export type UserRole = "buyer" | "maker" | "admin";
+
+export type UserAccount = {
+  id: string;
+  email: string;
+  name: string;
+  organization: string;
+  role: UserRole;
+  createdAt: string;
+  lastLoginAt: string;
+  stripeAccountId?: string;
+  stripeOnboardedAt?: string;
+};
+
+export type AuthChallenge = {
+  codeHash: string;
+  createdAt: string;
+  email: string;
+  expiresAt: string;
+  id: string;
+  purpose: "login";
+  role: UserRole;
+  usedAt?: string;
+};
+
+export type AuditEvent = {
+  actorEmail?: string;
+  createdAt: string;
+  id: string;
+  metadata: Record<string, string | number | boolean | null>;
+  targetId?: string;
+  type: string;
+};
+
+export type JobLifecycleEvent = {
+  actorEmail?: string;
+  createdAt: string;
+  id: string;
+  jobId: string;
+  note: string;
+  status: JobStatus;
+};
+
+export type PaymentRecord = {
+  amount: number;
+  checkoutUrl?: string;
+  createdAt: string;
+  currency: "cad" | "usd";
+  id: string;
+  jobId: string;
+  provider: "stripe";
+  providerSessionId?: string;
+  status: "Pending" | "Checkout Created" | "Paid" | "Failed";
 };
 
 export type ParsedCadFile = {

@@ -6,7 +6,7 @@ import {
 } from "../../lib/mesh/config";
 
 export const metadata: Metadata = {
-  title: "Terms of Service | Mesh",
+  title: "Terms of Service",
   description: "Terms for using Mesh to request and coordinate local fabrication.",
 };
 
@@ -61,8 +61,9 @@ export default function TermsPage() {
           </h2>
           <p>
             Mesh currently records RFQs and quote requests. Payment, refunds,
-            taxes, disputes, and maker payouts must be handled under the payment
-            process presented at the time a paid order is introduced.
+            taxes, disputes, and maker payouts are handled through the checkout
+            and payout process presented at the time of the order. Makers are
+            responsible for payout account accuracy and applicable tax handling.
           </p>
 
           <h2 className="pt-4 text-lg font-semibold text-graphite">
@@ -77,8 +78,8 @@ export default function TermsPage() {
           <h2 className="pt-4 text-lg font-semibold text-graphite">Contact</h2>
           <p>
             Questions about these terms can be sent to {supportContact}. Mesh
-            may update these terms as the service adds accounts, payments, and
-            additional marketplace workflows.
+            may update these terms as the service adds additional marketplace
+            workflows.
           </p>
         </section>
       </article>

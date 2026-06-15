@@ -3,14 +3,21 @@ import {
   ephemeralWriteError,
   shouldRejectEphemeralWrites,
 } from "../../../lib/mesh/config";
+import { recordAuditEvent } from "../../../lib/mesh/observability";
 import { getMarketplaceStore } from "../../../lib/mesh/store";
 import { saveCadUpload } from "../../../lib/mesh/upload-storage";
 import { parseParsedCadFile } from "../../../lib/mesh/validation";
+import { enforceRateLimit, statusForError } from "../../../lib/mesh/security";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
+    enforceRateLimit(request, "cad-upload", {
+      limit: 20,
+      windowMs: 1000 * 60 * 60,
+    });
+
     if (shouldRejectEphemeralWrites()) {
       throw ephemeralWriteError();
     }
@@ -37,6 +44,15 @@ export async function POST(request: Request) {
     };
     const store = getMarketplaceStore();
     const savedFile = await store.upsertFile(file);
+    await recordAuditEvent({
+      metadata: {
+        fileName: savedFile.name,
+        sizeBytes: savedFile.sizeBytes,
+        type: savedFile.type,
+      },
+      targetId: savedFile.id,
+      type: "file.uploaded",
+    });
 
     return NextResponse.json(
       { file: savedFile, storage: store.adapter },
@@ -51,11 +67,7 @@ export async function POST(request: Request) {
             : "Mesh could not upload that CAD file.",
       },
       {
-        status:
-          error instanceof Error &&
-          error.message.includes("Production storage")
-            ? 503
-            : 400,
+        status: statusForError(error),
       },
     );
   }

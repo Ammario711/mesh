@@ -3,6 +3,8 @@ import {
   ephemeralWriteError,
   shouldRejectEphemeralWrites,
 } from "../../../lib/mesh/config";
+import { recordAuditEvent } from "../../../lib/mesh/observability";
+import { enforceRateLimit, statusForError } from "../../../lib/mesh/security";
 import { getMarketplaceStore } from "../../../lib/mesh/store";
 import { parseJsonBody, parseParsedCadFile } from "../../../lib/mesh/validation";
 
@@ -17,6 +19,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    enforceRateLimit(request, "file-metadata", {
+      limit: 40,
+      windowMs: 1000 * 60 * 60,
+    });
+
     if (shouldRejectEphemeralWrites()) {
       throw ephemeralWriteError();
     }
@@ -25,29 +32,31 @@ export async function POST(request: Request) {
     const file = parseParsedCadFile(body.file ?? body);
     const store = getMarketplaceStore();
     const savedFile = await store.upsertFile(file);
+    await recordAuditEvent({
+      metadata: {
+        fileName: savedFile.name,
+        sizeBytes: savedFile.sizeBytes,
+        type: savedFile.type,
+      },
+      targetId: savedFile.id,
+      type: "file.metadata_saved",
+    });
 
     return NextResponse.json(
       { file: savedFile, storage: store.adapter },
       { status: 201 },
     );
   } catch (error) {
-    return errorResponse(error);
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Mesh could not save that CAD file.",
+      },
+      {
+        status: statusForError(error),
+      },
+    );
   }
-}
-
-function errorResponse(error: unknown) {
-  return NextResponse.json(
-    {
-      error:
-        error instanceof Error
-          ? error.message
-          : "Mesh could not save that CAD file.",
-    },
-    {
-      status:
-        error instanceof Error && error.message.includes("Production storage")
-          ? 503
-          : 400,
-    },
-  );
 }

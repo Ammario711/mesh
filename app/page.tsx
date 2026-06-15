@@ -377,6 +377,12 @@ export default function Home() {
               <a className="hover:text-zinc-300" href="/makers">
                 Apply
               </a>
+              <a className="hover:text-zinc-300" href="/account">
+                Account
+              </a>
+              <a className="hover:text-zinc-300" href="/admin">
+                Admin
+              </a>
               <a className="hover:text-zinc-300" href="/status">
                 Status
               </a>
@@ -1153,6 +1159,43 @@ function MakerCard({
 }
 
 function RecentJobsPanel({ jobs }: { jobs: JobSubmission[] }) {
+  const [payingJobId, setPayingJobId] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState("");
+
+  async function startCheckout(jobId: string) {
+    setPayingJobId(jobId);
+    setPaymentError("");
+
+    try {
+      const response = await fetch("/api/payments/checkout", {
+        body: JSON.stringify({ jobId }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      });
+      const payload = (await response.json()) as {
+        error?: string;
+        url?: string;
+      };
+
+      if (response.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+
+      if (!response.ok || !payload.url) {
+        throw new Error(payload.error ?? "Could not start checkout.");
+      }
+
+      window.location.href = payload.url;
+    } catch (error) {
+      setPaymentError(
+        error instanceof Error ? error.message : "Could not start checkout.",
+      );
+    } finally {
+      setPayingJobId(null);
+    }
+  }
+
   return (
     <section className="rounded-md border border-zinc-200 bg-white p-5 shadow-panel">
       <div className="flex items-center justify-between gap-3">
@@ -1166,6 +1209,11 @@ function RecentJobsPanel({ jobs }: { jobs: JobSubmission[] }) {
       </div>
 
       <div className="mt-5 space-y-3">
+        {paymentError && (
+          <p className="rounded-md bg-red-50 p-3 text-sm font-semibold text-red-700 ring-1 ring-red-100">
+            {paymentError}
+          </p>
+        )}
         {jobs.length === 0 ? (
           <EmptyState
             title="No sent jobs"
@@ -1216,6 +1264,17 @@ function RecentJobsPanel({ jobs }: { jobs: JobSubmission[] }) {
                   {job.notes}
                 </p>
               )}
+              <div className="mt-3 flex justify-end">
+                <button
+                  className="inline-flex h-9 items-center gap-2 rounded-md bg-weld px-3 text-xs font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                  disabled={payingJobId === job.id || job.status !== "Quote Sent"}
+                  onClick={() => void startCheckout(job.id)}
+                  type="button"
+                >
+                  <CircleDollarSign className="h-4 w-4" />
+                  {payingJobId === job.id ? "Opening..." : "Pay deposit"}
+                </button>
+              </div>
             </article>
           ))
         )}

@@ -21,6 +21,7 @@ export type PublicAppConfig = {
 };
 
 const defaultAppUrl = "https://mesh-marketplace-mvp.vercel.app";
+const defaultAuthSecret = "mesh-development-secret-change-before-production";
 const defaultSupportEmail = "support@mesh.local";
 const defaultLegalEffectiveDate = "June 10, 2026";
 
@@ -35,10 +36,14 @@ export function getPublicAppConfig(): PublicAppConfig {
     process.env.NEXT_PUBLIC_MESH_SUPPORT_EMAIL ??
     process.env.MESH_SUPPORT_EMAIL ??
     defaultSupportEmail;
+  const legalReviewedAt = process.env.MESH_LEGAL_REVIEWED_AT ?? "";
+  const legalReviewer = process.env.MESH_LEGAL_REVIEWER ?? "";
   const storage = hasDatabaseUrl() ? "postgres" : "file";
   const readiness = buildReadinessChecks({
     appUrl,
     isProduction,
+    legalReviewedAt,
+    legalReviewer,
     storage,
     supportEmail,
   });
@@ -82,14 +87,33 @@ export function ephemeralWriteError() {
 function buildReadinessChecks({
   appUrl,
   isProduction,
+  legalReviewedAt,
+  legalReviewer,
   storage,
   supportEmail,
 }: {
   appUrl: string;
   isProduction: boolean;
+  legalReviewedAt: string;
+  legalReviewer: string;
   storage: "file" | "postgres";
   supportEmail: string;
 }): ReadinessCheck[] {
+  const authSecret =
+    process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? "";
+  const adminEmails = (process.env.MESH_ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((email) => email.trim())
+    .filter(Boolean);
+  const hasEmailProvider = Boolean(process.env.RESEND_API_KEY);
+  const hasStripeSecret = Boolean(process.env.STRIPE_SECRET_KEY);
+  const hasStripeWebhook = Boolean(process.env.STRIPE_WEBHOOK_SECRET);
+  const hasSentryDsn = Boolean(
+    process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN,
+  );
+  const hasLegalReview = Boolean(legalReviewedAt && legalReviewer);
+  const productionSeverity = isProduction ? "critical" : "warning";
+
   return [
     {
       detail:
@@ -112,7 +136,7 @@ function buildReadinessChecks({
     },
     {
       detail: isPlaceholderSupportEmail(supportEmail)
-        ? "Set NEXT_PUBLIC_MESH_SUPPORT_EMAIL to a monitored inbox."
+        ? "Set NEXT_PUBLIC_MESH_SUPPORT_EMAIL or MESH_SUPPORT_EMAIL to a monitored support inbox."
         : "Support contact is configured.",
       key: "support-contact",
       ok: !isPlaceholderSupportEmail(supportEmail),
@@ -120,11 +144,83 @@ function buildReadinessChecks({
       title: "Support contact",
     },
     {
+      detail:
+        authSecret && authSecret !== defaultAuthSecret
+          ? "Signed session cookies use a production secret."
+          : "Set AUTH_SECRET to a long random value before enabling accounts.",
+      key: "auth-secret",
+      ok: Boolean(authSecret && authSecret !== defaultAuthSecret),
+      severity: productionSeverity,
+      title: "Auth secret",
+    },
+    {
+      detail:
+        adminEmails.length > 0
+          ? `${adminEmails.length} admin email${adminEmails.length === 1 ? "" : "s"} configured.`
+          : "Set MESH_ADMIN_EMAILS so operational tools are not open-ended.",
+      key: "admin-accounts",
+      ok: adminEmails.length > 0,
+      severity: productionSeverity,
+      title: "Admin accounts",
+    },
+    {
+      detail: hasEmailProvider
+        ? "Transactional email provider is configured."
+        : "Set RESEND_API_KEY and MESH_EMAIL_FROM so login codes and workflow notices are delivered.",
+      key: "email-provider",
+      ok: hasEmailProvider,
+      severity: productionSeverity,
+      title: "Email provider",
+    },
+    {
+      detail: hasStripeSecret
+        ? "Stripe API access is configured for checkout and Connect onboarding."
+        : "Set STRIPE_SECRET_KEY before accepting paid jobs or onboarding makers for payouts.",
+      key: "payments",
+      ok: hasStripeSecret,
+      severity: productionSeverity,
+      title: "Payments and payouts",
+    },
+    {
+      detail: hasStripeWebhook
+        ? "Stripe webhook signature verification is configured."
+        : "Set STRIPE_WEBHOOK_SECRET so completed checkout sessions update Mesh payments.",
+      key: "payment-webhooks",
+      ok: hasStripeWebhook,
+      severity: productionSeverity,
+      title: "Payment webhooks",
+    },
+    {
+      detail: hasSentryDsn
+        ? "Sentry DSN is configured for production error tracking."
+        : "Set SENTRY_DSN or NEXT_PUBLIC_SENTRY_DSN for runtime error tracking.",
+      key: "observability",
+      ok: hasSentryDsn,
+      severity: productionSeverity,
+      title: "Observability",
+    },
+    {
+      detail: hasLegalReview
+        ? `Legal review recorded by ${legalReviewer} on ${legalReviewedAt}.`
+        : "Set MESH_LEGAL_REVIEWER and MESH_LEGAL_REVIEWED_AT after counsel reviews terms, privacy, and operating policies.",
+      key: "legal-review",
+      ok: hasLegalReview,
+      severity: productionSeverity,
+      title: "Legal review",
+    },
+    {
       detail: "Terms, privacy, and trust pages are available.",
       key: "legal-pages",
       ok: true,
       severity: "info",
       title: "Legal pages",
+    },
+    {
+      detail: "Rate limits, a maker-application honeypot, and production storage guards are enabled in write routes.",
+      key: "abuse-protection",
+      ok: true,
+      severity: "info",
+      title: "Abuse protection",
     },
   ];
 }
